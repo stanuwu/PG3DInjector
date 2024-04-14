@@ -3,6 +3,16 @@
 using PG3DInjector;
 
 Console.WriteLine("Injecting...");
-Inject.Load("Pixel Gun 3D", Path.GetFullPath("./minhook.x64.dll"));
-Inject.Load("Pixel Gun 3D", Path.GetFullPath("./PixelGunCheat.dll"));
-Console.WriteLine("Injected");
+try
+{
+    Inject.Load("Pixel Gun 3D", Path.GetFullPath("./minhook.x64.dll"));
+    Inject.Load("Pixel Gun 3D", Path.GetFullPath("./PixelGunCheat.dll"));
+    Console.WriteLine("Injected");
+}
+catch (Exception e)
+{
+    Console.WriteLine("Error Injecting:");
+    Console.WriteLine(e.Message);
+}
+
+Console.ReadKey();

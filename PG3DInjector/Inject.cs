@@ -72,8 +72,27 @@ namespace PG3DInjector
             return processes.Length > 0 ? processes[0] : null;
         }
 
+        private static bool DoesDllExist(string dll)
+        {
+            return File.Exists(dll);
+        }
+
         private static void InjectDLL(Process targetProcess, string dll)
         {
+            if(targetProcess == null) return;
+            if (!DoesDllExist(dll)) 
+            {
+                Console.WriteLine($"DLL '{dll}' not found. Aborting...");
+                Console.WriteLine("MAKE SURE THE DLL IS IN THE SAME FOLDER AS THIS PROGRAM!");
+                Console.WriteLine("Press any key to exit...");
+                Console.ReadKey();
+                Process.GetCurrentProcess().Kill();
+                return;
+            }
+            else
+            {
+                Console.WriteLine($"DLL '{dll}' found. Injecting...");
+            }
             IntPtr procHandle = OpenProcess(PROCESS_CREATE_THREAD | PROCESS_QUERY_INFORMATION | PROCESS_VM_OPERATION | PROCESS_VM_WRITE | PROCESS_VM_READ,
                 false, targetProcess.Id);
             IntPtr loadLibraryAddr = GetProcAddress(GetModuleHandle("kernel32.dll"), "LoadLibraryA");

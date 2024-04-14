@@ -38,7 +38,42 @@ namespace PG3DInjector
 
         public static void Load(string process, string dll)
         {
-            Process targetProcess = Process.GetProcessesByName(process)[0];
+            int maxRetries = 10;
+            int delayMilliseconds = 5000;
+
+            for (int attempt = 1; attempt <= maxRetries; attempt++)
+            {
+                Console.WriteLine($"Attempt {attempt} to find target process '{process}'...");
+                Process targetProcess = GetProcessByName(process);
+                if (targetProcess != null)
+                {
+                    Console.WriteLine($"Target process '{process}' found. Injecting '{dll}'...");
+                    InjectDLL(targetProcess, dll);
+                    return;
+                }
+                else
+                {
+                    if (attempt < maxRetries)
+                    {
+                        Console.WriteLine($"Target process '{process}' not found. Retrying in {delayMilliseconds / 1000} seconds...");
+                        Thread.Sleep(delayMilliseconds);
+                    }
+                    else
+                    {
+                        Console.WriteLine($"Failed to find target process '{process}' after {maxRetries} retries.");
+                    }
+                }
+            }
+        }
+
+        private static Process GetProcessByName(string processName)
+        {
+            Process[] processes = Process.GetProcessesByName(processName);
+            return processes.Length > 0 ? processes[0] : null;
+        }
+
+        private static void InjectDLL(Process targetProcess, string dll)
+        {
             IntPtr procHandle = OpenProcess(PROCESS_CREATE_THREAD | PROCESS_QUERY_INFORMATION | PROCESS_VM_OPERATION | PROCESS_VM_WRITE | PROCESS_VM_READ,
                 false, targetProcess.Id);
             IntPtr loadLibraryAddr = GetProcAddress(GetModuleHandle("kernel32.dll"), "LoadLibraryA");
@@ -49,5 +84,7 @@ namespace PG3DInjector
                 out bytesWritten);
             CreateRemoteThread(procHandle, IntPtr.Zero, 0, loadLibraryAddr, allocMemAddress, 0, IntPtr.Zero);
         }
+
+
     }
 }

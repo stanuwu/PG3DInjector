@@ -7,10 +7,4 @@
         <Nullable>enable</Nullable>
     </PropertyGroup>
 
-    <ItemGroup>
-      <Reference Include="ManagedInjector.Lib">
-        <HintPath>..\libs\ManagedInjector.Lib.dll</HintPath>
-      </Reference>
-    </ItemGroup>
-
 </Project>

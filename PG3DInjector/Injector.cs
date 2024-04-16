@@ -14,14 +14,8 @@ namespace PG3DInjector
                 return;
             }
 
-            try
-            {
-                var mapper = new LibraryMapper(processes[0], dll, MappingFlags.DiscardHeaders);
-                mapper.MapLibrary();
-            } catch (Exception ex)
-            {
-                Logger.ConsoleWrite($"[<ERROR>] {ex.Message}", ConsoleColor.Red);
-            }
+            var mapper = new LibraryMapper(processes[0], dll, MappingFlags.DiscardHeaders);
+            mapper.MapLibrary();
         }
     }
 }

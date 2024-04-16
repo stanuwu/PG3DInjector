@@ -4,139 +4,201 @@ using PG3DInjector;
 
 internal class Program
 {
+    private static readonly string[] DllNames = ["minhook.x64.dll", "PixelGunCheat.dll"];
+    private static readonly string LatestReleaseApiUrl = "https://api.github.com/repos/stanuwu/PixelGunCheatInternal/releases/latest";
+
     private static async Task Main(string[] _)
     {
-        HttpClient client = new();
+        using HttpClient client = new();
+        client.DefaultRequestHeaders.UserAgent.ParseAdd("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/58.0.3029.110 Safari/537.36");
 
-        if (!IsProcessOpen("Pixel Gun 3D"))
+        var targetProcess = GetFirstNonSuspendedPixelGun3DInstance();
+        if (targetProcess == null)
         {
-            Logger.ConsoleWrite("[<ERROR>] Please start the game before running the injector.", ConsoleColor.Red);
+            Logger.ConsoleWrite("[<ERROR>] Please start a non-suspended instance of the game before running the injector.", ConsoleColor.Red);
             KeepConsoleOpen();
             return;
         }
 
-        string[] dllNames = { "minhook.x64.dll", "PixelGunCheat.dll" };
-        string latestReleaseApiUrl = "https://api.github.com/repos/stanuwu/PixelGunCheatInternal/releases/latest";
+        if (!CheckLocalFilesExist(DllNames))
+        {
+            if (!await TryDownloadMissingFiles(client, DllNames))
+            {
+                KeepConsoleOpen();
+                return;
+            }
+        }
 
-        client.DefaultRequestHeaders.UserAgent.ParseAdd("Mozilla/5.0 (Windows; Windows NT 10.0; Win64; x64; en-US) AppleWebKit/536.26 (KHTML, like Gecko) Chrome/49.0.3165.319 Safari/533.5 Edge/13.63869");
+        InjectDllsAndHandleResult(DllNames, targetProcess);
+        KeepConsoleOpen();
+    }
 
+    private static bool CheckLocalFilesExist(string[] dllNames)
+    {
         bool allFilesExist = true;
         foreach (var dllName in dllNames)
         {
-            string dllPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, dllName);
-            if (!File.Exists(dllPath))
+            if (!File.Exists(Path.Combine(AppDomain.CurrentDomain.BaseDirectory, dllName)))
             {
                 allFilesExist = false;
                 Logger.ConsoleWrite($"[<WARN>] {dllName} does not exist locally, attempting download.", ConsoleColor.Yellow);
             }
         }
+        return allFilesExist;
+    }
 
-        if (allFilesExist)
+    private static async Task<bool> TryDownloadMissingFiles(HttpClient client, string[] dllNames)
+    {
+        try
         {
-            InjectDLLs(dllNames);
+            string latestReleaseJson = await GetLatestReleaseJson(client, LatestReleaseApiUrl);
+            JObject releaseInfo = JObject.Parse(latestReleaseJson);
+
+            if (releaseInfo["assets"] is JArray assets)
+            {
+                foreach (var dllName in dllNames)
+                {
+                    await DownloadFileIfNeeded(client, assets, dllName);
+                }
+            }
+            else
+            {
+                Logger.ConsoleWrite("[<ERROR>] No assets found in the latest release.", ConsoleColor.Red);
+                return false;
+            }
+        }
+        catch (Exception e)
+        {
+            Logger.ConsoleWrite($"[<ERROR>] Failed to download the latest DLLs: {e.Message}", ConsoleColor.Red);
+            return false;
+        }
+        return true;
+    }
+
+    private static async Task DownloadFileIfNeeded(HttpClient client, JArray assets, string dllName)
+    {
+        string dllPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, dllName);
+        if (!File.Exists(dllPath))
+        {
+            string? downloadUrl = FindAssetDownloadUrl(assets, dllName);
+            if (!string.IsNullOrEmpty(downloadUrl))
+            {
+                Logger.ConsoleWrite($"[<INFO>] Downloading {dllName}", ConsoleColor.Cyan);
+                await DownloadFile(client, downloadUrl, dllPath);
+            }
+            else
+            {
+                Logger.ConsoleWrite("[<ERROR>] Failed to find download URL for {dllName} in the latest release.", ConsoleColor.Red);
+                throw new InvalidOperationException("Download URL not found.");
+            }
+        }
+    }
+
+    private static async Task<string> GetLatestReleaseJson(HttpClient client, string apiUrl)
+    {
+        HttpResponseMessage response = await client.GetAsync(apiUrl);
+        response.EnsureSuccessStatusCode();
+        return await response.Content.ReadAsStringAsync();
+    }
+
+    private static string? FindAssetDownloadUrl(JArray assets, string assetName)
+    {
+        foreach (var asset in assets)
+        {
+            if (asset["name"]?.ToString().Equals(assetName, StringComparison.OrdinalIgnoreCase) == true)
+            {
+                return asset["browser_download_url"]?.ToString();
+            }
+        }
+        return null;
+    }
+
+    private static async Task DownloadFile(HttpClient client, string url, string outputPath)
+    {
+        HttpResponseMessage response = await client.GetAsync(url);
+        response.EnsureSuccessStatusCode();
+        byte[] fileBytes = await response.Content.ReadAsByteArrayAsync();
+        await File.WriteAllBytesAsync(outputPath, fileBytes);
+        Logger.ConsoleWrite($"[<OKAY>] {Path.GetFileName(outputPath)} downloaded successfully.", ConsoleColor.Green);
+    }
+
+    private static void InjectDllsAndHandleResult(string[] dllNames, Process targetProcess)
+    {
+        var failed = false;
+        foreach (var dllName in dllNames)
+        {
+            if (!TryInjectDll(dllName, targetProcess))
+            {
+                failed = true;
+            }
+        }
+
+        if (failed)
+        {
+            Logger.ConsoleWrite("[<ERROR>] Injection failed.", ConsoleColor.Red);
         }
         else
         {
-            try
-            {
-                string latestReleaseJson = await GetLatestReleaseJson(latestReleaseApiUrl);
-                JObject releaseInfo = JObject.Parse(latestReleaseJson);
-
-                if (releaseInfo["assets"] is JArray assets)
-                {
-                    foreach (var dllName in dllNames)
-                    {
-                        string dllPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, dllName);
-                        if (!File.Exists(dllPath))
-                        {
-                            string? downloadUrl = FindAssetDownloadUrl(assets, dllName);
-                            if (!string.IsNullOrEmpty(downloadUrl))
-                            {
-                                Logger.ConsoleWrite($"[<INFO>] Downloading {dllName}", ConsoleColor.Cyan);
-                                await DownloadFile(downloadUrl, dllPath);
-                            }
-                            else
-                            {
-                                Logger.ConsoleWrite($"[<ERROR>] Failed to find download URL for {dllName} in the latest release.", ConsoleColor.Red);
-                                KeepConsoleOpen();
-                                return;
-                            }
-                        }
-                    }
-
-                    InjectDLLs(dllNames);
-                }
-                else
-                {
-                    Logger.ConsoleWrite("[<ERROR>] No assets found in the latest release.", ConsoleColor.Red);
-                    KeepConsoleOpen();
-                }
-            }
-            catch (Exception e)
-            {
-                Logger.ConsoleWrite($"[<ERROR>] Failed to download the latest DLLs or inject: {e.Message}", ConsoleColor.Red);
-                KeepConsoleOpen();
-            }
-        }
-
-        async Task<string> GetLatestReleaseJson(string apiUrl)
-        {
-            HttpResponseMessage response = await client.GetAsync(apiUrl);
-            response.EnsureSuccessStatusCode();
-            return await response.Content.ReadAsStringAsync();
-        }
-
-        string? FindAssetDownloadUrl(JArray? assets, string assetName)
-        {
-            if (assets == null) return null;
-
-            foreach (var asset in assets)
-            {
-                if (asset?["name"]?.ToString().Equals(assetName, StringComparison.OrdinalIgnoreCase) == true)
-                {
-                    return asset["browser_download_url"]?.ToString();
-                }
-            }
-            return null;
-        }
-
-        async Task DownloadFile(string url, string outputPath)
-        {
-            HttpResponseMessage response = await client.GetAsync(url);
-            response.EnsureSuccessStatusCode();
-            byte[] fileBytes = await response.Content.ReadAsByteArrayAsync();
-            await File.WriteAllBytesAsync(outputPath, fileBytes);
-            Logger.ConsoleWrite($"[<OKAY>] {Path.GetFileName(outputPath)} downloaded successfully.", ConsoleColor.Green);
-        }
-
-        static void InjectDLLs(string[] dllNames)
-        {
-            foreach (var dllName in dllNames)
-            {
-                string dllPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, dllName);
-                Logger.ConsoleWrite($"[<INFO>] Injecting {dllName}", ConsoleColor.Cyan);
-                Injector.Map("Pixel Gun 3D", dllPath);
-            }
             Logger.ConsoleWrite("[<OKAY>] Injection completed successfully.", ConsoleColor.Green);
-            Thread.Sleep(7500);
         }
+    }
 
-        bool IsProcessOpen(string name)
+    private static bool TryInjectDll(string dllName, Process targetProcess)
+    {
+        string dllPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, dllName);
+        Logger.ConsoleWrite($"[<INFO>] Injecting {dllName} into process {targetProcess.Id}", ConsoleColor.Cyan);
+        try
         {
-            foreach (Process clsProcess in Process.GetProcesses())
-            {
-                if (clsProcess.ProcessName.Contains(name))
-                {
-                    return true;
-                }
-            }
+            Injector.Map(targetProcess.ProcessName, dllPath);
+            return true;
+        }
+        catch (Exception ex)
+        {
+            Logger.ConsoleWrite($"[<ERROR>] Failed to inject {dllName} into process {targetProcess.Id}: {ex.Message}", ConsoleColor.Red);
             return false;
         }
+    }
 
-        static void KeepConsoleOpen()
+    private static Process? GetFirstNonSuspendedPixelGun3DInstance()
+    {
+        var processes = Process.GetProcessesByName("Pixel Gun 3D");
+        foreach (var process in processes)
         {
-            Logger.ConsoleWrite("Press any key to exit...");
-            Console.ReadKey();
+            if (!IsProcessSuspended(process))
+            {
+                return process;
+            }
+        }
+        return null;
+    }
+
+    private static bool IsProcessSuspended(Process process)
+    {
+        process.Refresh();
+
+        if (process.Threads.Count == 0)
+            return false;
+
+        foreach (ProcessThread thread in process.Threads)
+        {
+            if (thread.WaitReason != ThreadWaitReason.Suspended)
+                return false;
+        }
+
+        return true;
+    }
+
+    private static void KeepConsoleOpen()
+    {
+        Console.WriteLine("Press any key to exit... (auto-exiting in 10 seconds)");
+        var task = Task.Run(() => Console.ReadKey(intercept: true));
+        if (task.Wait(TimeSpan.FromSeconds(10)))
+        {
+            Console.WriteLine("\nExiting...");
+        }
+        else
+        {
+            Console.WriteLine("\nAuto-exiting...");
         }
     }
 }

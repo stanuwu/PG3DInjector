@@ -4,7 +4,7 @@ using PG3DInjector;
 
 internal class Program
 {
-    private static readonly string[] DllNames = ["minhook.x64.dll", "PixelGunCheat.dll"];
+    private static readonly string DLLName = "PixelGunCheat.dll";
     private static readonly string LatestReleaseApiUrl = "https://api.github.com/repos/stanuwu/PixelGunCheatInternal/releases/latest";
 
     private static async Task Main(string[] _)
@@ -20,34 +20,31 @@ internal class Program
             return;
         }
 
-        if (!CheckLocalFilesExist(DllNames))
+        if (!CheckIfExists(DLLName))
         {
-            if (!await TryDownloadMissingFiles(client, DllNames))
+            if (!await TryDownloadMissingFile(client, DLLName))
             {
                 KeepConsoleOpen();
                 return;
             }
         }
 
-        InjectDllsAndHandleResult(DllNames, targetProcess);
+        InjectDLLAndHandleResult(DLLName, targetProcess);
         KeepConsoleOpen();
     }
 
-    private static bool CheckLocalFilesExist(string[] dllNames)
+    private static bool CheckIfExists(string dllName)
     {
         bool allFilesExist = true;
-        foreach (var dllName in dllNames)
+        if (!File.Exists(Path.Combine(AppDomain.CurrentDomain.BaseDirectory, dllName)))
         {
-            if (!File.Exists(Path.Combine(AppDomain.CurrentDomain.BaseDirectory, dllName)))
-            {
-                allFilesExist = false;
-                Logger.ConsoleWrite($"[<WARN>] {dllName} does not exist locally, attempting download.", ConsoleColor.Yellow);
-            }
+            allFilesExist = false;
+            Logger.ConsoleWrite($"[<WARN>] {dllName} was not found locally, attempting download.", ConsoleColor.Yellow);
         }
         return allFilesExist;
     }
 
-    private static async Task<bool> TryDownloadMissingFiles(HttpClient client, string[] dllNames)
+    private static async Task<bool> TryDownloadMissingFile(HttpClient client, string dllName)
     {
         try
         {
@@ -56,10 +53,7 @@ internal class Program
 
             if (releaseInfo["assets"] is JArray assets)
             {
-                foreach (var dllName in dllNames)
-                {
-                    await DownloadFileIfNeeded(client, assets, dllName);
-                }
+                await DownloadFileIfNeeded(client, assets, dllName);
             }
             else
             {
@@ -69,7 +63,7 @@ internal class Program
         }
         catch (Exception e)
         {
-            Logger.ConsoleWrite($"[<ERROR>] Failed to download the latest DLLs: {e.Message}", ConsoleColor.Red);
+            Logger.ConsoleWrite($"[<ERROR>] Failed to download the latest DLL: {e.Message}", ConsoleColor.Red);
             return false;
         }
         return true;
@@ -122,18 +116,9 @@ internal class Program
         Logger.ConsoleWrite($"[<OKAY>] {Path.GetFileName(outputPath)} downloaded successfully.", ConsoleColor.Green);
     }
 
-    private static void InjectDllsAndHandleResult(string[] dllNames, Process targetProcess)
+    private static void InjectDLLAndHandleResult(string dllName, Process targetProcess)
     {
-        var failed = false;
-        foreach (var dllName in dllNames)
-        {
-            if (!TryInjectDll(dllName, targetProcess))
-            {
-                failed = true;
-            }
-        }
-
-        if (failed)
+        if (!TryInjectDll(dllName, targetProcess))
         {
             Logger.ConsoleWrite("[<ERROR>] Injection failed.", ConsoleColor.Red);
         }
@@ -181,8 +166,15 @@ internal class Program
 
         foreach (ProcessThread thread in process.Threads)
         {
-            if (thread.WaitReason != ThreadWaitReason.Suspended)
-                return false;
+            try
+            {
+                if (thread.WaitReason != ThreadWaitReason.Suspended)
+                    return false;
+            } catch (Exception ex)
+            {
+                Logger.ConsoleWrite($"[<WARN>] Skipping thread {thread.Id} for reason: {ex.Message}", ConsoleColor.Yellow);
+                return true;
+            }
         }
 
         return true;

@@ -3,4 +3,5 @@ PG3DInjector.sln.DotSettings.user
 global.json
 PG3DInjector/obj
 PG3DInjector/bin
+PG3DInjector/PG3DInjector.csproj.user
 /.vs

@@ -1,11 +1,10 @@
 ﻿using System.Diagnostics;
-using Newtonsoft.Json.Linq;
 using PG3DInjector;
 
 internal class Program
 {
     private static readonly string DLLName = "PixelGunCheat.dll";
-    private static readonly string LatestReleaseApiUrl = "https://api.github.com/repos/stanuwu/PixelGunCheatInternal/releases/latest";
+    private static readonly string DownloadUrl = "https://github.com/stanuwu/PixelGunCheatInternal/releases/latest/download/PixelGunCheat.dll";
 
     private static async Task Main(string[] _)
     {
@@ -14,7 +13,7 @@ internal class Program
         var targetProcess = GetFirstNonSuspendedPixelGun3DInstance();
         if (targetProcess == null)
         {
-            Logger.ConsoleWrite("[<ERROR>] Please start a non-suspended instance of the game before running the injector.", ConsoleColor.Red);
+            Logger.Error("Please start a non-suspended instance of the game before running the injector.");
             KeepConsoleOpen();
             return;
         }
@@ -44,50 +43,23 @@ internal class Program
             return true;
         }
 
-        Logger.ConsoleWrite($"[<WARN>] {dllName} was not found locally, attempting download.", ConsoleColor.Yellow);
+        Logger.Error($"Injection failed: {dllName} was not found locally, attempting download.");
         return false;
     }
 
     private static async Task<bool> TryDownloadDll(HttpClient client)
     {
+        string dllPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, DLLName);
         try
         {
-            string json = await GetLatestReleaseJson(client);
-            JObject releaseInfo = JObject.Parse(json);
-            return await DownloadDllIfAvailable(client, releaseInfo);
+            await DownloadFile(client, DownloadUrl, dllPath);
+            return true;
         }
         catch (Exception ex)
         {
-            Logger.ConsoleWrite($"[<ERROR>] Failed to download the latest DLL: {ex.Message}", ConsoleColor.Red);
+            Logger.Error($"Injection failed: {ex.Message}");
             return false;
         }
-    }
-
-    private static async Task<string> GetLatestReleaseJson(HttpClient client)
-    {
-        HttpResponseMessage response = await client.GetAsync(LatestReleaseApiUrl);
-        response.EnsureSuccessStatusCode();
-        return await response.Content.ReadAsStringAsync();
-    }
-
-    private static async Task<bool> DownloadDllIfAvailable(HttpClient client, JObject releaseInfo)
-    {
-        if (releaseInfo["assets"] is JArray assets)
-        {
-            string dllPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, DLLName);
-            string? downloadUrl = assets.Children<JObject>()
-                .FirstOrDefault(a => a["name"]?.ToString().Equals(DLLName, StringComparison.OrdinalIgnoreCase) == true)?
-                .Value<string>("browser_download_url");
-
-            if (!string.IsNullOrEmpty(downloadUrl))
-            {
-                await DownloadFile(client, downloadUrl, dllPath);
-                return true;
-            }
-        }
-
-        Logger.ConsoleWrite("[<ERROR>] No assets found in the latest release.", ConsoleColor.Red);
-        return false;
     }
 
     private static async Task DownloadFile(HttpClient client, string url, string outputPath)
@@ -96,22 +68,22 @@ internal class Program
         response.EnsureSuccessStatusCode();
         byte[] fileData = await response.Content.ReadAsByteArrayAsync();
         await File.WriteAllBytesAsync(outputPath, fileData);
-        Logger.ConsoleWrite($"[<OKAY>] {Path.GetFileName(outputPath)} downloaded successfully.", ConsoleColor.Green);
+        Logger.Okay($"{Path.GetFileName(outputPath)} downloaded successfully.");
     }
 
     private static void InjectDll(string dllName, Process targetProcess)
     {
         string dllPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, dllName);
-        Logger.ConsoleWrite($"[<INFO>] Injecting {dllName} into process {targetProcess.Id}.", ConsoleColor.Cyan);
+        Logger.Log($"Injecting {dllName} into process {targetProcess.Id}.");
 
         try
         {
             Injector.Map(targetProcess.ProcessName, dllPath);
-            Logger.ConsoleWrite("[<OKAY>] Injection completed successfully.", ConsoleColor.Green);
+            Logger.Okay("Injection completed successfully.");
         }
         catch (Exception ex)
         {
-            Logger.ConsoleWrite($"[<ERROR>] Injection failed: {ex.Message}", ConsoleColor.Red);
+            Logger.Error($"Injection failed: {ex.Message}");
         }
     }
 

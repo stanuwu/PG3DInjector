@@ -2,13 +2,13 @@
 
 namespace PG3DInjector
 {
-    internal class Logger
+    internal partial class Logger
     {
         public static void ConsoleWrite(string message, ConsoleColor consoleColor = ConsoleColor.Black)
         {
-            foreach (Match match in Regex.Matches(message, @"(<[^>]*>)|([^<>]+)").Cast<Match>())
+            foreach (Match match in ColorRegex().Matches(message).Cast<Match>())
             {
-                if (match.Value.StartsWith("<"))
+                if (match.Value.StartsWith('<'))
                 {
                     Console.ForegroundColor = consoleColor;
                     Console.Write(match.Value.Trim('<', '>'));
@@ -21,5 +21,20 @@ namespace PG3DInjector
             }
             Console.WriteLine();
         }
+
+        public static void Log(string message)
+            => ConsoleWrite($"[<INFO>] {message}", ConsoleColor.Cyan);
+
+        public static void Warn(string message)
+            => ConsoleWrite($"[<WARN>] {message}", ConsoleColor.Yellow);
+
+        public static void Error(string message)
+            => ConsoleWrite($"[<ERROR>] {message}", ConsoleColor.Red);
+
+        public static void Okay(string message)
+            => ConsoleWrite($"[<OKAY>] {message}", ConsoleColor.Green);
+
+        [GeneratedRegex(@"(<[^>]*>)|([^<>]+)")]
+        private static partial Regex ColorRegex();
     }
 }

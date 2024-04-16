@@ -9,8 +9,7 @@ internal class Program
 
     private static async Task Main(string[] _)
     {
-        using HttpClient client = new();
-        client.DefaultRequestHeaders.UserAgent.ParseAdd("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/58.0.3029.110 Safari/537.36");
+        var client = InitializeHttpClient();
 
         var targetProcess = GetFirstNonSuspendedPixelGun3DInstance();
         if (targetProcess == null)
@@ -20,171 +19,119 @@ internal class Program
             return;
         }
 
-        if (!CheckIfExists(DLLName))
+        if (!LocalDllExists(DLLName) && !await TryDownloadDll(client))
         {
-            if (!await TryDownloadMissingFile(client, DLLName))
-            {
-                KeepConsoleOpen();
-                return;
-            }
+            KeepConsoleOpen();
+            return;
         }
 
-        InjectDLLAndHandleResult(DLLName, targetProcess);
+        InjectDll(DLLName, targetProcess);
         KeepConsoleOpen();
     }
 
-    private static bool CheckIfExists(string dllName)
+    private static HttpClient InitializeHttpClient()
     {
-        bool allFilesExist = true;
-        if (!File.Exists(Path.Combine(AppDomain.CurrentDomain.BaseDirectory, dllName)))
-        {
-            allFilesExist = false;
-            Logger.ConsoleWrite($"[<WARN>] {dllName} was not found locally, attempting download.", ConsoleColor.Yellow);
-        }
-        return allFilesExist;
+        var client = new HttpClient();
+        client.DefaultRequestHeaders.UserAgent.ParseAdd("Mozilla/5.0");
+        return client;
     }
 
-    private static async Task<bool> TryDownloadMissingFile(HttpClient client, string dllName)
+    private static bool LocalDllExists(string dllName)
+    {
+        string dllPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, dllName);
+        if (File.Exists(dllPath))
+        {
+            return true;
+        }
+
+        Logger.ConsoleWrite($"[<WARN>] {dllName} was not found locally, attempting download.", ConsoleColor.Yellow);
+        return false;
+    }
+
+    private static async Task<bool> TryDownloadDll(HttpClient client)
     {
         try
         {
-            string latestReleaseJson = await GetLatestReleaseJson(client, LatestReleaseApiUrl);
-            JObject releaseInfo = JObject.Parse(latestReleaseJson);
-
-            if (releaseInfo["assets"] is JArray assets)
-            {
-                await DownloadFileIfNeeded(client, assets, dllName);
-            }
-            else
-            {
-                Logger.ConsoleWrite("[<ERROR>] No assets found in the latest release.", ConsoleColor.Red);
-                return false;
-            }
+            string json = await GetLatestReleaseJson(client);
+            JObject releaseInfo = JObject.Parse(json);
+            return await DownloadDllIfAvailable(client, releaseInfo);
         }
-        catch (Exception e)
+        catch (Exception ex)
         {
-            Logger.ConsoleWrite($"[<ERROR>] Failed to download the latest DLL: {e.Message}", ConsoleColor.Red);
+            Logger.ConsoleWrite($"[<ERROR>] Failed to download the latest DLL: {ex.Message}", ConsoleColor.Red);
             return false;
         }
-        return true;
     }
 
-    private static async Task DownloadFileIfNeeded(HttpClient client, JArray assets, string dllName)
+    private static async Task<string> GetLatestReleaseJson(HttpClient client)
     {
-        string dllPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, dllName);
-        if (!File.Exists(dllPath))
-        {
-            string? downloadUrl = FindAssetDownloadUrl(assets, dllName);
-            if (!string.IsNullOrEmpty(downloadUrl))
-            {
-                Logger.ConsoleWrite($"[<INFO>] Downloading {dllName}", ConsoleColor.Cyan);
-                await DownloadFile(client, downloadUrl, dllPath);
-            }
-            else
-            {
-                Logger.ConsoleWrite("[<ERROR>] Failed to find download URL for {dllName} in the latest release.", ConsoleColor.Red);
-                throw new InvalidOperationException("Download URL not found.");
-            }
-        }
-    }
-
-    private static async Task<string> GetLatestReleaseJson(HttpClient client, string apiUrl)
-    {
-        HttpResponseMessage response = await client.GetAsync(apiUrl);
+        HttpResponseMessage response = await client.GetAsync(LatestReleaseApiUrl);
         response.EnsureSuccessStatusCode();
         return await response.Content.ReadAsStringAsync();
     }
 
-    private static string? FindAssetDownloadUrl(JArray assets, string assetName)
+    private static async Task<bool> DownloadDllIfAvailable(HttpClient client, JObject releaseInfo)
     {
-        foreach (var asset in assets)
+        if (releaseInfo["assets"] is JArray assets)
         {
-            if (asset["name"]?.ToString().Equals(assetName, StringComparison.OrdinalIgnoreCase) == true)
+            string dllPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, DLLName);
+            string? downloadUrl = assets.Children<JObject>()
+                .FirstOrDefault(a => a["name"]?.ToString().Equals(DLLName, StringComparison.OrdinalIgnoreCase) == true)?
+                .Value<string>("browser_download_url");
+
+            if (!string.IsNullOrEmpty(downloadUrl))
             {
-                return asset["browser_download_url"]?.ToString();
+                await DownloadFile(client, downloadUrl, dllPath);
+                return true;
             }
         }
-        return null;
+
+        Logger.ConsoleWrite("[<ERROR>] No assets found in the latest release.", ConsoleColor.Red);
+        return false;
     }
 
     private static async Task DownloadFile(HttpClient client, string url, string outputPath)
     {
         HttpResponseMessage response = await client.GetAsync(url);
         response.EnsureSuccessStatusCode();
-        byte[] fileBytes = await response.Content.ReadAsByteArrayAsync();
-        await File.WriteAllBytesAsync(outputPath, fileBytes);
+        byte[] fileData = await response.Content.ReadAsByteArrayAsync();
+        await File.WriteAllBytesAsync(outputPath, fileData);
         Logger.ConsoleWrite($"[<OKAY>] {Path.GetFileName(outputPath)} downloaded successfully.", ConsoleColor.Green);
     }
 
-    private static void InjectDLLAndHandleResult(string dllName, Process targetProcess)
-    {
-        if (!TryInjectDll(dllName, targetProcess))
-        {
-            Logger.ConsoleWrite("[<ERROR>] Injection failed.", ConsoleColor.Red);
-        }
-        else
-        {
-            Logger.ConsoleWrite("[<OKAY>] Injection completed successfully.", ConsoleColor.Green);
-        }
-    }
-
-    private static bool TryInjectDll(string dllName, Process targetProcess)
+    private static void InjectDll(string dllName, Process targetProcess)
     {
         string dllPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, dllName);
-        Logger.ConsoleWrite($"[<INFO>] Injecting {dllName} into process {targetProcess.Id}", ConsoleColor.Cyan);
+        Logger.ConsoleWrite($"[<INFO>] Injecting {dllName} into process {targetProcess.Id}.", ConsoleColor.Cyan);
+
         try
         {
             Injector.Map(targetProcess.ProcessName, dllPath);
-            return true;
+            Logger.ConsoleWrite("[<OKAY>] Injection completed successfully.", ConsoleColor.Green);
         }
         catch (Exception ex)
         {
-            Logger.ConsoleWrite($"[<ERROR>] Failed to inject {dllName} into process {targetProcess.Id}: {ex.Message}", ConsoleColor.Red);
-            return false;
+            Logger.ConsoleWrite($"[<ERROR>] Injection failed: {ex.Message}", ConsoleColor.Red);
         }
     }
 
     private static Process? GetFirstNonSuspendedPixelGun3DInstance()
     {
-        var processes = Process.GetProcessesByName("Pixel Gun 3D");
-        foreach (var process in processes)
-        {
-            if (!IsProcessSuspended(process))
-            {
-                return process;
-            }
-        }
-        return null;
+        return Process.GetProcessesByName("Pixel Gun 3D")
+            .FirstOrDefault(p => !IsProcessSuspended(p));
     }
 
     private static bool IsProcessSuspended(Process process)
     {
         process.Refresh();
-
-        if (process.Threads.Count == 0)
-            return false;
-
-        foreach (ProcessThread thread in process.Threads)
-        {
-            try
-            {
-                if (thread.WaitReason != ThreadWaitReason.Suspended)
-                    return false;
-            } catch (Exception ex)
-            {
-                Logger.ConsoleWrite($"[<WARN>] Skipping thread {thread.Id} for reason: {ex.Message}", ConsoleColor.Yellow);
-                return true;
-            }
-        }
-
-        return true;
+        return process.Threads.Cast<ProcessThread>()
+            .All(t => t.ThreadState == System.Diagnostics.ThreadState.Wait && t.WaitReason == ThreadWaitReason.Suspended);
     }
 
     private static void KeepConsoleOpen()
     {
         Console.WriteLine("Press any key to exit... (auto-exiting in 10 seconds)");
-        var task = Task.Run(() => Console.ReadKey(intercept: true));
-        if (task.Wait(TimeSpan.FromSeconds(10)))
+        if (Task.Run(() => Console.ReadKey(true)).Wait(TimeSpan.FromSeconds(10)))
         {
             Console.WriteLine("\nExiting...");
         }

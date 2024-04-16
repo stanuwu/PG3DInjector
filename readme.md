@@ -14,6 +14,4 @@ We are not encouraging modding or cheating with this repository. It is purely fo
 
 > Thanks to `@ph0mp` for helping improve the injector.
 
-Based on > https://codingvision.net/c-inject-a-dll-into-a-process-w-createremotethread
-
-Credit: Dan Sporici @ codingvision.net
+Based around https://github.com/jdewera/lunar

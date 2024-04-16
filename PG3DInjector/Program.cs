@@ -3,11 +3,14 @@ using PG3DInjector;
 
 internal class Program
 {
+    private static readonly string Version = "v1.4-3";
     private static readonly string DLLName = "PixelGunCheat.dll";
-    private static readonly string DownloadUrl = "https://github.com/stanuwu/PixelGunCheatInternal/releases/latest/download/PixelGunCheat.dll";
+    private static readonly string DownloadUrl = $"https://github.com/stanuwu/PixelGunCheatInternal/releases/latest/download/{DLLName}";
 
     private static async Task Main(string[] _)
     {
+        Console.Title = $"BKC Injector {Version}";
+
         var client = InitializeHttpClient();
 
         var targetProcess = GetFirstNonSuspendedPixelGun3DInstance();
@@ -43,7 +46,7 @@ internal class Program
             return true;
         }
 
-        Logger.Error($"Injection failed: {dllName} was not found locally, attempting download.");
+        Logger.Log($"Injection failed: {dllName} was not found locally, attempting download.");
         return false;
     }
 

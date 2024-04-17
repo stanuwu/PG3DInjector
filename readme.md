@@ -1,9 +1,6 @@
 ## PG3D Injector
 Injector for [PixelGun3DInternal](https://github.com/stanuwu/PixelGunCheatInternal)
 
-## VirusTotal
-https://www.virustotal.com/gui/file/3ff703bf23a1bddbbb2212dbc1bca8f943128ed3fc29bad3c3e77e9b74b2f5f6
-
 ## Warning!
 - This Program is FREE SOFTWARE.
 - It will always be available for free, with the source code included.

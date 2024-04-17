@@ -1,2 +1,5 @@
-
 /.vs
+*/.vs
+*.user
+/BKC Injector/obj
+/BKC Injector/bin

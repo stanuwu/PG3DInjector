@@ -3,6 +3,7 @@ using System.IO;
 using System.Net.Http;
 using System.Reflection;
 using System.Security.Cryptography;
+using System.Text.RegularExpressions;
 using System.Windows;
 
 namespace BKC_Injector
@@ -10,8 +11,10 @@ namespace BKC_Injector
     public partial class MainWindow : Window
     {
         private const string DLLName = "PixelGunCheat.dll";
+        private const string ConfigName = "config.ini";
         private static readonly string BaseDirectory = GetApplicationDirectory();
-        private static readonly string DownloadUrl = $"https://github.com/stanuwu/PixelGunCheatInternal/releases/latest/download/{DLLName}";
+        private static readonly string DependenciesDir = Path.Combine(BaseDirectory, "dependencies");
+        private static readonly string DefaultDownloadUrl = $"https://github.com/stanuwu/PixelGunCheatInternal/releases/latest/download/{DLLName}";
         private static readonly HttpClient HttpClient = new();
 
         public MainWindow()
@@ -23,19 +26,16 @@ namespace BKC_Injector
 
         private static string GetApplicationDirectory()
         {
-            string? directory = Path.GetDirectoryName(Process.GetCurrentProcess()?.MainModule?.FileName);
-            if (!string.IsNullOrWhiteSpace(directory) && Directory.Exists(directory))
-                return directory;
-
-            directory = Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location);
-            if (!string.IsNullOrWhiteSpace(directory) && Directory.Exists(directory))
-                return directory;
-
-            return Environment.CurrentDirectory;
+            string? directory = Path.GetDirectoryName(Process.GetCurrentProcess()?.MainModule?.FileName) ??
+                                Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location) ??
+                                Environment.CurrentDirectory;
+            return directory;
         }
 
         private async Task InitializeApplication()
         {
+            CheckAndCreateIniFile();
+            EnsureDependenciesDirectory();
             DisableUI();
             AppendStatus("Checking DLL status...");
             await EnsureDllIsReady();
@@ -52,71 +52,140 @@ namespace BKC_Injector
             InjectButton.IsEnabled = true;
         }
 
+        private void EnsureDependenciesDirectory()
+        {
+            if (!Directory.Exists(DependenciesDir))
+            {
+                Directory.CreateDirectory(DependenciesDir);
+                AppendStatus("Dependencies directory created.");
+            }
+        }
+
+        private void CheckAndCreateIniFile()
+        {
+            string iniPath = Path.Combine(BaseDirectory, ConfigName);
+            if (!File.Exists(iniPath))
+            {
+                AppendStatus("Creating INI file...");
+                string[] iniContent = [
+                    "[BKC Configuration]",
+                    "AutoUpdate = true",
+                    "ForceVersion = ",
+                    "; Do not mess with this file unless you know what you are doing. Here be dragons!",
+                    "; Forced version must be in format 'vX.X-x' (e.g., v1.5, v1.5-2) and must be a version equal to or newer than v1.4"
+                ];
+                File.WriteAllLines(iniPath, iniContent);
+            }
+        }
+
+        private (bool autoUpdate, string forcedVersion) ReadIniFileSettings()
+        {
+            string iniPath = Path.Combine(BaseDirectory, ConfigName);
+            try
+            {
+                var parser = new IniParser(iniPath);
+                string autoUpdateStr = parser.GetValue("BKC Configuration", "AutoUpdate");
+                string forcedVersion = parser.GetValue("BKC Configuration", "ForceVersion").Trim();
+
+                bool autoUpdate = bool.Parse(autoUpdateStr);
+
+                AppendStatus("Configuration file read successfully.");
+                return (autoUpdate, forcedVersion);
+            }
+            catch (Exception ex)
+            {
+                AppendStatus($"Failed to read configuration file: {ex.Message}");
+                return (true, string.Empty);
+            }
+        }
+
+
         private async Task EnsureDllIsReady()
         {
-            string dllPath = Path.Combine(BaseDirectory, DLLName);
+            var (autoUpdate, forcedVersion) = ReadIniFileSettings();
+            string downloadUrl = GetDownloadUrl(forcedVersion);
+            string dllPath = Path.Combine(DependenciesDir, DLLName);
 
-            if (!File.Exists(dllPath))
+            bool exists = File.Exists(dllPath);
+            if (!exists || (autoUpdate && await IsUpdateNeeded(dllPath, downloadUrl)))
             {
-                AppendStatus("The required DLL is missing, initiating download...");
-                if (await TryDownloadDll(dllPath))
+                if (!exists)
                 {
-                    AppendStatus("DLL has been successfully downloaded.");
+                    AppendStatus($"DLL not found. Initiating download for {Path.GetFileName(downloadUrl)}...");
+                }
+                else if (autoUpdate)
+                {
+                    AppendStatus($"Update available. Initiating update for {Path.GetFileName(downloadUrl)}...");
+                }
+
+                if (await TryDownloadDll(dllPath, downloadUrl))
+                {
+                    if (!exists)
+                    {
+                        AppendStatus("DLL downloaded successfully.");
+                    }
+                    else
+                    {
+                        AppendStatus("DLL updated successfully.");
+                    }
                 }
                 else
                 {
-                    AppendStatus("Failed to download the required DLL.");
-                }
-            }
-            else if (await IsUpdateNeeded(dllPath))
-            {
-                AppendStatus("An update for the DLL is available, updating now...");
-                if (await TryDownloadDll(dllPath))
-                {
-                    AppendStatus("The DLL has been successfully updated.");
-                }
-                else
-                {
-                    AppendStatus("Failed to update the DLL.");
+                    AppendStatus("Failed to download or update the DLL.");
                 }
             }
             else
             {
-                AppendStatus("The DLL is up to date. No updates needed.");
+                if (!autoUpdate)
+                {
+                    AppendStatus("Auto-update is disabled. Skipped version check.");
+                }
+                else
+                {
+                    AppendStatus("The DLL is up to date. No updates needed.");
+                }
             }
         }
 
-        private async Task<bool> TryDownloadDll(string path)
+        private string GetDownloadUrl(string forcedVersion)
+        {
+            if (!string.IsNullOrEmpty(forcedVersion))
+            {
+                if (VersionRegex().IsMatch(forcedVersion))
+                {
+                    AppendStatus($"Forcing version: {forcedVersion}");
+                    return $"https://github.com/stanuwu/PixelGunCheatInternal/releases/download/{forcedVersion}/{DLLName}";
+                }
+                else
+                {
+                    AppendStatus($"Invalid version format '{forcedVersion}'. Falling back to latest.");
+                }
+            }
+            return DefaultDownloadUrl;
+        }
+
+        private async Task<bool> TryDownloadDll(string path, string url)
         {
             try
             {
-                byte[] fileData = await HttpClient.GetByteArrayAsync(DownloadUrl);
+                byte[] fileData = await HttpClient.GetByteArrayAsync(url);
                 File.WriteAllBytes(path, fileData);
+                AppendStatus($"Downloaded {Path.GetFileName(url)} successfully.");
                 return true;
-            }
-            catch (HttpRequestException ex)
-            {
-                AppendStatus($"Network error during DLL download: {ex.Message}");
-                return false;
-            }
-            catch (IOException ex)
-            {
-                AppendStatus($"File system error during DLL download: {ex.Message}");
-                return false;
             }
             catch (Exception ex)
             {
-                AppendStatus($"Unexpected error during DLL download: {ex.Message}");
+                AppendStatus($"Unable to find or download {Path.GetFileName(url)}: {ex.Message}");
                 return false;
             }
         }
 
-        private async Task<bool> IsUpdateNeeded(string localPath)
+        private async Task<bool> IsUpdateNeeded(string localPath, string url)
         {
             try
             {
                 byte[] localHash = ComputeFileHash(localPath);
-                byte[] remoteHash = await FetchRemoteFileHash();
+                byte[] remoteHash = await FetchRemoteFileHash(url);
                 return !localHash.SequenceEqual(remoteHash);
             }
             catch (Exception ex)
@@ -133,11 +202,11 @@ namespace BKC_Injector
             return sha256.ComputeHash(stream);
         }
 
-        private async Task<byte[]> FetchRemoteFileHash()
+        private async Task<byte[]> FetchRemoteFileHash(string url)
         {
             try
             {
-                byte[] fileData = await HttpClient.GetByteArrayAsync(DownloadUrl);
+                byte[] fileData = await HttpClient.GetByteArrayAsync(url);
                 return SHA256.HashData(fileData);
             }
             catch (Exception ex)
@@ -165,15 +234,17 @@ namespace BKC_Injector
                 return;
             }
 
-            string dllPath = Path.Combine(BaseDirectory, DLLName);
-            if (!File.Exists(dllPath) || await IsUpdateNeeded(dllPath))
+            string dllPath = Path.Combine(DependenciesDir, DLLName);
+            if (!File.Exists(dllPath) || await IsUpdateNeeded(dllPath, DefaultDownloadUrl))
             {
-                if (!await TryDownloadDll(dllPath))
+                if (!await TryDownloadDll(dllPath, DefaultDownloadUrl))
                 {
                     EnableUI();
                     return;
                 }
             }
+
+            Environment.SetEnvironmentVariable("BKC_PATH", BaseDirectory);
 
             InjectDll(dllPath, targetProcess);
             EnableUI();
@@ -181,15 +252,13 @@ namespace BKC_Injector
 
         private static Process? GetFirstNonSuspendedPixelGun3DInstance()
         {
-            return Process.GetProcessesByName("Pixel Gun 3D")
-                .FirstOrDefault(p => !IsProcessSuspended(p));
+            return Process.GetProcessesByName("Pixel Gun 3D").FirstOrDefault(p => !IsProcessSuspended(p));
         }
 
         private static bool IsProcessSuspended(Process process)
         {
             process.Refresh();
-            return process.Threads.Cast<ProcessThread>()
-                .All(t => t.ThreadState == System.Diagnostics.ThreadState.Wait && t.WaitReason == ThreadWaitReason.Suspended);
+            return process.Threads.Cast<ProcessThread>().All(t => t.ThreadState == System.Diagnostics.ThreadState.Wait && t.WaitReason == ThreadWaitReason.Suspended);
         }
 
         private void InjectDll(string dllPath, Process process)
@@ -202,6 +271,7 @@ namespace BKC_Injector
             }
             catch (Exception ex)
             {
+                Environment.SetEnvironmentVariable("BKC_PATH", null);
                 AppendStatus($"Injection failed: {ex.Message}");
             }
         }
@@ -214,5 +284,8 @@ namespace BKC_Injector
                 StatusTextBox.ScrollToEnd();
             });
         }
+
+        [GeneratedRegex(@"^v\d+\.\d+(-\d+)?$")]
+        private static partial Regex VersionRegex();
     }
 }

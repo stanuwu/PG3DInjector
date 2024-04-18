@@ -13,6 +13,7 @@ namespace BKC_Injector
     public partial class MainWindow : Window
     {
         private const string DLLName = "PixelGunCheat.dll";
+        private const string FontName = "UbuntuMono-Regular.ttf";
         private const string ConfigName = "config.ini";
         private static readonly string BaseDirectory = GetApplicationDirectory();
         private static readonly string DependenciesDir = Path.Combine(BaseDirectory, "dependencies");
@@ -258,8 +259,8 @@ namespace BKC_Injector
 
         private async Task EnsureFontFileExists()
         {
-            string fontPath = Path.Combine(DependenciesDir, "UbuntuMono-Regular.ttf");
-            string fontUrl = "https://boykissers.dev/DuPONT/dependencies/raw/branch/main/UbuntuMono-Regular.ttf";
+            string fontPath = Path.Combine(DependenciesDir, FontName);
+            string fontUrl = $"https://boykissers.dev/DuPONT/dependencies/raw/branch/main/{FontName}";
 
             if (!File.Exists(fontPath))
             {

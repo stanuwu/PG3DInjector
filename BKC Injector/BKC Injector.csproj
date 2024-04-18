@@ -17,7 +17,7 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <Resource Include="dependencies\*.*"/>
+    <Resource Include="dependencies\*.*" />
     <Reference Include="Lunar">
         <HintPath>dependencies\Lunar.dll</HintPath>
     </Reference>

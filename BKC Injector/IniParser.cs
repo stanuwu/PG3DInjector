@@ -1,15 +1,15 @@
 ﻿using System.IO;
 using System.Text.RegularExpressions;
+using System.Collections.Generic;
 
 namespace BKC_Injector
 {
     public partial class IniParser
     {
-        private readonly Dictionary<string, Dictionary<string, string>> data;
+        private readonly Dictionary<string, Dictionary<string, string>> data = [];
 
         public IniParser(string filePath)
         {
-            data = [];
             LoadData(filePath);
         }
 
@@ -24,53 +24,61 @@ namespace BKC_Injector
             foreach (var line in File.ReadAllLines(filePath))
             {
                 string processedLine = line.Trim();
-
                 if (string.IsNullOrEmpty(processedLine) || processedLine.StartsWith(';') || processedLine.StartsWith('#'))
                     continue;
 
                 if (processedLine.StartsWith('[') && processedLine.EndsWith(']'))
                 {
-                    if (currentSection.Count > 0 && !string.IsNullOrEmpty(currentSectionName))
-                    {
+                    if (!string.IsNullOrEmpty(currentSectionName))
                         data[currentSectionName] = new Dictionary<string, string>(currentSection);
-                        currentSection.Clear();
-                    }
 
                     currentSectionName = processedLine[1..^1].Trim();
+                    currentSection.Clear();
                     continue;
                 }
 
-                var keyValueMatch = VariableRegex().Match(processedLine);
-                if (keyValueMatch.Success)
+                var match = PropertyRegex().Match(processedLine);
+                if (match.Success)
                 {
-                    string key = keyValueMatch.Groups["key"].Value.Trim();
-                    string value = keyValueMatch.Groups["value"].Value.Trim();
+                    string key = match.Groups["key"].Value.Trim();
+                    string value = match.Groups["value"].Value.Trim();
                     currentSection[key] = value;
                 }
             }
 
-            if (currentSection.Count > 0 && !string.IsNullOrEmpty(currentSectionName))
-            {
+            if (!string.IsNullOrEmpty(currentSectionName))
                 data[currentSectionName] = new Dictionary<string, string>(currentSection);
-            }
         }
 
-        public string GetValue(string section, string key)
+        public string? GetValue(string section, string key)
         {
-            if (data.TryGetValue(section, out var sectionData))
+            if (data.TryGetValue(section, out var sectionData) && sectionData.TryGetValue(key, out var value))
+                return value;
+            return null;
+        }
+
+        public void SetValue(string section, string key, string value)
+        {
+            if (!data.TryGetValue(section, out var sectionData))
             {
-                if (sectionData.TryGetValue(key, out var value))
-                    return value;
-                else
-                    throw new KeyNotFoundException($"The key '{key}' was not found in section '{section}'.");
+                sectionData = [];
+                data[section] = sectionData;
             }
-            else
+            sectionData[key] = value;
+        }
+
+        public void SaveSettings(string filePath)
+        {
+            using var writer = new StreamWriter(filePath);
+            foreach (var section in data)
             {
-                throw new KeyNotFoundException($"The section '{section}' was not found in the INI file.");
+                writer.WriteLine($"[{section.Key}]");
+                foreach (var kvp in section.Value)
+                    writer.WriteLine($"{kvp.Key} = {kvp.Value}");
             }
         }
 
         [GeneratedRegex(@"^(?<key>[^=]+)=(?<value>.*)$")]
-        private static partial Regex VariableRegex();
+        private static partial Regex PropertyRegex();
     }
 }

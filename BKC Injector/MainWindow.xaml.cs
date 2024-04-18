@@ -5,6 +5,8 @@ using System.Reflection;
 using System.Security.Cryptography;
 using System.Text.RegularExpressions;
 using System.Windows;
+using System.Windows.Threading;
+using System.Windows.Input;
 
 namespace BKC_Injector
 {
@@ -16,6 +18,8 @@ namespace BKC_Injector
         private static readonly string DependenciesDir = Path.Combine(BaseDirectory, "dependencies");
         private static readonly string DefaultDownloadUrl = $"https://github.com/stanuwu/PixelGunCheatInternal/releases/latest/download/{DLLName}";
         private static readonly HttpClient HttpClient = new();
+        private DispatcherTimer? autoInjectTimer;
+        private bool isWaitingForProcess = false;
 
         public MainWindow()
         {
@@ -24,32 +28,72 @@ namespace BKC_Injector
             Loaded += async (_, __) => await InitializeApplication();
         }
 
-        private static string GetApplicationDirectory()
-        {
-            string? directory = Path.GetDirectoryName(Process.GetCurrentProcess()?.MainModule?.FileName) ??
-                                Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location) ??
-                                Environment.CurrentDirectory;
-            return directory;
-        }
+        private static string GetApplicationDirectory() =>
+            Path.GetDirectoryName(Process.GetCurrentProcess()?.MainModule?.FileName) ??
+            Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location) ??
+            Environment.CurrentDirectory;
 
         private async Task InitializeApplication()
         {
             CheckAndCreateIniFile();
+            ValidateAndUpdateConfigFile();
             EnsureDependenciesDirectory();
+            await EnsureFontFileExists();
             DisableUI();
             AppendStatus("Checking DLL status...");
             await EnsureDllIsReady();
             EnableUI();
+            SetupAutoInject();
         }
 
-        private void DisableUI()
+        private void SetupAutoInject()
         {
-            InjectButton.IsEnabled = false;
+            var (_, _, autoInject) = ReadIniFileSettings();
+            if (autoInject)
+            {
+                autoInjectTimer = new DispatcherTimer
+                {
+                    Interval = TimeSpan.FromMilliseconds(250)
+                };
+                autoInjectTimer.Tick += AutoInjectTimer_Tick;
+                autoInjectTimer.Start();
+                InjectButton.IsEnabled = false;
+                InjectButton.Opacity = 0.5;
+                InjectButton.Cursor = Cursors.No;
+                AppendStatus("Auto-inject is enabled. Waiting for Pixel Gun 3D to open...");
+            }
         }
+
+        private void AutoInjectTimer_Tick(object? sender, EventArgs e)
+        {
+            var process = GetFirstNonSuspendedPixelGun3DInstance();
+            if (process != null)
+            {
+                if (isWaitingForProcess)
+                {
+                    AppendStatus("Pixel Gun 3D instance found. Auto-injecting...");
+                    isWaitingForProcess = false;
+                }
+                Inject();
+                autoInjectTimer?.Stop();
+            }
+            else if (!isWaitingForProcess)
+            {
+                AppendStatus("Waiting for a Pixel Gun 3D process...");
+                isWaitingForProcess = true;
+            }
+        }
+
+        private void DisableUI() => InjectButton.IsEnabled = false;
 
         private void EnableUI()
         {
-            InjectButton.IsEnabled = true;
+            if (autoInjectTimer == null || !autoInjectTimer.IsEnabled)
+            {
+                InjectButton.IsEnabled = true;
+                InjectButton.Opacity = 1;
+                InjectButton.Cursor = Cursors.Arrow;
+            }
         }
 
         private void EnsureDependenciesDirectory()
@@ -66,43 +110,88 @@ namespace BKC_Injector
             string iniPath = Path.Combine(BaseDirectory, ConfigName);
             if (!File.Exists(iniPath))
             {
-                AppendStatus("Creating INI file...");
-                string[] iniContent = [
-                    "[BKC Configuration]",
-                    "AutoUpdate = true",
-                    "ForceVersion = ",
-                    "; Do not mess with this file unless you know what you are doing. Here be dragons!",
-                    "; Forced version must be in format 'vX.X-x' (e.g., v1.5, v1.5-2) and must be a version equal to or newer than v1.4"
-                ];
-                File.WriteAllLines(iniPath, iniContent);
+                AppendStatus("Configuration file missing; creating a new one with default settings.");
+                CreateDefaultConfigFile(iniPath);
             }
         }
 
-        private (bool autoUpdate, string forcedVersion) ReadIniFileSettings()
+        private static void CreateDefaultConfigFile(string iniPath)
+        {
+            string[] iniContent = [
+                "[BKC Configuration]",
+                "AutoUpdate = true",
+                "ForceVersion = ",
+                "AutoInject = false"
+            ];
+            File.WriteAllLines(iniPath, iniContent);
+        }
+
+        private void ValidateAndUpdateConfigFile()
+        {
+            string iniPath = Path.Combine(BaseDirectory, ConfigName);
+            var parser = new IniParser(iniPath);
+            bool isUpdated = false;
+
+            if (!bool.TryParse(parser.GetValue("BKC Configuration", "AutoUpdate"), out _))
+            {
+                parser.SetValue("BKC Configuration", "AutoUpdate", "true");
+                isUpdated = true;
+            }
+
+            if (!bool.TryParse(parser.GetValue("BKC Configuration", "AutoInject"), out _))
+            {
+                parser.SetValue("BKC Configuration", "AutoInject", "false");
+                isUpdated = true;
+            }
+
+            string forceVersion = parser.GetValue("BKC Configuration", "ForceVersion") ?? "";
+            Regex versionRegex = VersionRegex();
+            if (!versionRegex.IsMatch(forceVersion))
+            {
+                parser.SetValue("BKC Configuration", "ForceVersion", "");
+                isUpdated = true;
+            }
+
+            if (isUpdated)
+            {
+                AppendStatus("Configuration file was updated with default values for missing or invalid entries.");
+                parser.SaveSettings(iniPath);
+            }
+        }
+
+        private (bool autoUpdate, string forcedVersion, bool autoInject) ReadIniFileSettings()
         {
             string iniPath = Path.Combine(BaseDirectory, ConfigName);
             try
             {
                 var parser = new IniParser(iniPath);
-                string autoUpdateStr = parser.GetValue("BKC Configuration", "AutoUpdate");
-                string forcedVersion = parser.GetValue("BKC Configuration", "ForceVersion").Trim();
-
-                bool autoUpdate = bool.Parse(autoUpdateStr);
+                bool autoUpdate = TryGetBoolValue(parser, "BKC Configuration", "AutoUpdate", true);
+                string forcedVersion = parser.GetValue("BKC Configuration", "ForceVersion")?.Trim() ?? "";
+                bool autoInject = TryGetBoolValue(parser, "BKC Configuration", "AutoInject", false);
 
                 AppendStatus("Configuration file read successfully.");
-                return (autoUpdate, forcedVersion);
+                return (autoUpdate, forcedVersion, autoInject);
             }
             catch (Exception ex)
             {
                 AppendStatus($"Failed to read configuration file: {ex.Message}");
-                return (true, string.Empty);
+                return (true, string.Empty, false);
             }
         }
 
+        private static bool TryGetBoolValue(IniParser parser, string section, string key, bool defaultValue)
+        {
+            string? value = parser.GetValue(section, key);
+            if (bool.TryParse(value, out bool result))
+            {
+                return result;
+            }
+            return defaultValue;
+        }
 
         private async Task EnsureDllIsReady()
         {
-            var (autoUpdate, forcedVersion) = ReadIniFileSettings();
+            var (autoUpdate, forcedVersion, _) = ReadIniFileSettings();
             string downloadUrl = GetDownloadUrl(forcedVersion);
             string dllPath = Path.Combine(DependenciesDir, DLLName);
 
@@ -136,31 +225,18 @@ namespace BKC_Injector
             }
             else
             {
-                if (!autoUpdate)
-                {
-                    AppendStatus("Auto-update is disabled. Skipped version check.");
-                }
-                else
-                {
-                    AppendStatus("The DLL is up to date. No updates needed.");
-                }
+                AppendStatus("DLL is up to date. No update needed.");
             }
         }
 
         private string GetDownloadUrl(string forcedVersion)
         {
-            if (!string.IsNullOrEmpty(forcedVersion))
+            if (!string.IsNullOrEmpty(forcedVersion) && VersionRegex().IsMatch(forcedVersion))
             {
-                if (VersionRegex().IsMatch(forcedVersion))
-                {
-                    AppendStatus($"Forcing version: {forcedVersion}");
-                    return $"https://github.com/stanuwu/PixelGunCheatInternal/releases/download/{forcedVersion}/{DLLName}";
-                }
-                else
-                {
-                    AppendStatus($"Invalid version format '{forcedVersion}'. Falling back to latest.");
-                }
+                AppendStatus($"Forcing version: {forcedVersion}");
+                return $"https://github.com/stanuwu/PixelGunCheatInternal/releases/download/{forcedVersion}/{DLLName}";
             }
+            AppendStatus("Using default download URL.");
             return DefaultDownloadUrl;
         }
 
@@ -177,6 +253,27 @@ namespace BKC_Injector
             {
                 AppendStatus($"Unable to find or download {Path.GetFileName(url)}: {ex.Message}");
                 return false;
+            }
+        }
+
+        private async Task EnsureFontFileExists()
+        {
+            string fontPath = Path.Combine(DependenciesDir, "UbuntuMono-Regular.ttf");
+            string fontUrl = "https://github.com/stanuwu/PixelGunCheatInternal/raw/master/PixelGunCheat/fonts/UbuntuMono-Regular.ttf";
+
+            if (!File.Exists(fontPath))
+            {
+                AppendStatus("Font file missing; downloading...");
+                try
+                {
+                    byte[] fontData = await HttpClient.GetByteArrayAsync(fontUrl);
+                    File.WriteAllBytes(fontPath, fontData);
+                    AppendStatus("Font file downloaded successfully.");
+                }
+                catch (Exception ex)
+                {
+                    AppendStatus($"Failed to download font file: {ex.Message}");
+                }
             }
         }
 

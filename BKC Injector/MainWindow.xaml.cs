@@ -259,7 +259,7 @@ namespace BKC_Injector
         private async Task EnsureFontFileExists()
         {
             string fontPath = Path.Combine(DependenciesDir, "UbuntuMono-Regular.ttf");
-            string fontUrl = "https://github.com/stanuwu/PixelGunCheatInternal/raw/master/PixelGunCheat/fonts/UbuntuMono-Regular.ttf";
+            string fontUrl = "https://boykissers.dev/DuPONT/dependencies/raw/branch/main/UbuntuMono-Regular.ttf";
 
             if (!File.Exists(fontPath))
             {

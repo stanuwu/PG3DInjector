@@ -25,6 +25,15 @@ namespace BKC_Injector
         public MainWindow()
         {
             InitializeComponent();
+
+            if (!CheckRequiredDLLs())
+            {
+                MessageBox.Show("VC Redist is not installed. Please install it from: https://aka.ms/vs/17/release/vc_redist.x64.exe",
+                                "BKC Injector", MessageBoxButton.OK, MessageBoxImage.Error);
+                Application.Current.Shutdown();
+                return;
+            }
+
             HttpClient.DefaultRequestHeaders.UserAgent.ParseAdd("Mozilla/5.0");
             Loaded += async (_, __) => await InitializeApplication();
         }
@@ -33,6 +42,14 @@ namespace BKC_Injector
             Path.GetDirectoryName(Process.GetCurrentProcess()?.MainModule?.FileName) ??
             Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location) ??
             Environment.CurrentDirectory;
+
+        private static bool CheckRequiredDLLs()
+        {
+            string systemPath = Environment.GetFolderPath(Environment.SpecialFolder.System);
+            string dllPath1 = Path.Combine(systemPath, "VCRUNTIME140.dll");
+            string dllPath2 = Path.Combine(systemPath, "MSVCP140.dll");
+            return File.Exists(dllPath1) && File.Exists(dllPath2);
+        }
 
         private async Task InitializeApplication()
         {
@@ -147,7 +164,7 @@ namespace BKC_Injector
 
             string forceVersion = parser.GetValue("BKC Configuration", "ForceVersion") ?? "";
             Regex versionRegex = VersionRegex();
-            if (!versionRegex.IsMatch(forceVersion))
+            if (!versionRegex.IsMatch(forceVersion) && forceVersion != "")
             {
                 parser.SetValue("BKC Configuration", "ForceVersion", "");
                 isUpdated = true;

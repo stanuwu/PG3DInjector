@@ -1,21 +1,38 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
+  <!-- Basic Project Settings -->
   <PropertyGroup>
     <OutputType>WinExe</OutputType>
     <TargetFramework>net8.0-windows</TargetFramework>
     <RootNamespace>BKC_Injector</RootNamespace>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
+  </PropertyGroup>
+
+  <!-- WPF and Runtime Settings -->
+  <PropertyGroup>
     <UseWPF>true</UseWPF>
     <RuntimeIdentifier>win-x64</RuntimeIdentifier>
+    <Optimize>true</Optimize>
+    <DebugType>none</DebugType>
+  </PropertyGroup>
+
+  <!-- Publishing Settings -->
+  <PropertyGroup>
     <PublishSingleFile>true</PublishSingleFile>
-    <PublishReadyToRun>true</PublishReadyToRun>
     <SelfContained>true</SelfContained>
-    <ApplicationIcon>dependencies\favicon.ico</ApplicationIcon>
+    <PublishReadyToRun>true</PublishReadyToRun>
     <IncludeAllContentForSelfExtract>true</IncludeAllContentForSelfExtract>
+    <EnableCompressionInSingleFile>true</EnableCompressionInSingleFile>
+  </PropertyGroup>
+
+  <!-- Application Resources -->
+  <PropertyGroup>
+    <ApplicationIcon>dependencies\favicon.ico</ApplicationIcon>
     <ApplicationManifest>app.manifest</ApplicationManifest>
   </PropertyGroup>
 
+  <!-- Dependencies and Resources -->
   <ItemGroup>
     <Resource Include="dependencies\*.*" />
     <Reference Include="Lunar">

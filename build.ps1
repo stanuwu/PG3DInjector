@@ -1,1 +1,6 @@
-dotnet publish -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true
+$configuration = "Release"
+$runtime = "win-x64"
+$selfContained = $true
+$publishSingleFile = $true
+
+dotnet publish -c $configuration -r $runtime --self-contained $selfContained -p:PublishSingleFile=$publishSingleFile

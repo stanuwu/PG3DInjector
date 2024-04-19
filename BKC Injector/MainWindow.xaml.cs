@@ -21,6 +21,7 @@ namespace BKC_Injector
         private static readonly HttpClient HttpClient = new();
         private DispatcherTimer? autoInjectTimer;
         private bool isWaitingForProcess = false;
+        private bool isUpdateInProgress = false;
 
         public MainWindow()
         {
@@ -54,36 +55,38 @@ namespace BKC_Injector
         private async Task InitializeApplication()
         {
             CheckAndCreateIniFile();
-            ValidateAndUpdateConfigFile();
+            bool configUpdated = ValidateAndUpdateConfigFile();
+            var settings = ReadIniFileSettings(configUpdated ? "re-read" : "read");
+
             EnsureDependenciesDirectory();
             await EnsureFontFileExists();
             DisableUI();
-            AppendStatus("Checking DLL status...");
-            await EnsureDllIsReady();
+
+            await EnsureDllIsReady(settings.autoUpdate, settings.forcedVersion);
+
+            ApplyConfigurationSettings(settings);
             EnableUI();
-            SetupAutoInject();
         }
 
-        private void SetupAutoInject()
+        private void SetupAutoInject(bool autoInject)
         {
-            var (_, _, autoInject) = ReadIniFileSettings();
-            if (autoInject)
+            if (!autoInject) return;
+
+            autoInjectTimer = new DispatcherTimer
             {
-                autoInjectTimer = new DispatcherTimer
-                {
-                    Interval = TimeSpan.FromMilliseconds(250)
-                };
-                autoInjectTimer.Tick += AutoInjectTimer_Tick;
-                autoInjectTimer.Start();
-                InjectButton.IsEnabled = false;
-                InjectButton.Opacity = 0.5;
-                InjectButton.Cursor = Cursors.No;
-                AppendStatus("Auto-inject is enabled. Waiting for Pixel Gun 3D to open...");
-            }
+                Interval = TimeSpan.FromMilliseconds(250)
+            };
+            autoInjectTimer.Tick += AutoInjectTimer_Tick;
+            autoInjectTimer.Start();
+            InjectButton.IsEnabled = false;
+            InjectButton.Opacity = 0.5;
+            InjectButton.Cursor = Cursors.No;
+            AppendStatus("Auto-inject is enabled. Waiting for Pixel Gun 3D to open...");
         }
 
         private void AutoInjectTimer_Tick(object? sender, EventArgs e)
         {
+            if (isUpdateInProgress) return;
             var process = GetFirstNonSuspendedPixelGun3DInstance();
             if (process != null)
             {
@@ -102,11 +105,15 @@ namespace BKC_Injector
             }
         }
 
-        private void DisableUI() => InjectButton.IsEnabled = false;
+        private void DisableUI()
+        {
+            InjectButton.IsEnabled = false;
+            isUpdateInProgress = true;
+        }
 
         private void EnableUI()
         {
-            if (autoInjectTimer == null || !autoInjectTimer.IsEnabled)
+            if (!isUpdateInProgress)
             {
                 InjectButton.IsEnabled = true;
                 InjectButton.Opacity = 1;
@@ -144,27 +151,26 @@ namespace BKC_Injector
             File.WriteAllLines(iniPath, iniContent);
         }
 
-        private void ValidateAndUpdateConfigFile()
+        private bool ValidateAndUpdateConfigFile()
         {
             string iniPath = Path.Combine(BaseDirectory, ConfigName);
             var parser = new IniParser(iniPath);
             bool isUpdated = false;
 
-            if (!bool.TryParse(parser.GetValue("BKC Configuration", "AutoUpdate"), out _))
+            if (string.IsNullOrWhiteSpace(parser.GetValue("BKC Configuration", "AutoUpdate")))
             {
                 parser.SetValue("BKC Configuration", "AutoUpdate", "true");
                 isUpdated = true;
             }
 
-            if (!bool.TryParse(parser.GetValue("BKC Configuration", "AutoInject"), out _))
+            if (string.IsNullOrWhiteSpace(parser.GetValue("BKC Configuration", "AutoInject")))
             {
                 parser.SetValue("BKC Configuration", "AutoInject", "false");
                 isUpdated = true;
             }
 
             string forceVersion = parser.GetValue("BKC Configuration", "ForceVersion") ?? "";
-            Regex versionRegex = VersionRegex();
-            if (!versionRegex.IsMatch(forceVersion) && forceVersion != "")
+            if (string.IsNullOrEmpty(forceVersion) || !VersionRegex().IsMatch(forceVersion))
             {
                 parser.SetValue("BKC Configuration", "ForceVersion", "");
                 isUpdated = true;
@@ -172,12 +178,40 @@ namespace BKC_Injector
 
             if (isUpdated)
             {
-                AppendStatus("Configuration file was updated with default values for missing or invalid entries.");
                 parser.SaveSettings(iniPath);
+                AppendStatus("Configuration file updated with default settings due to missing or invalid entries.");
+                ReloadConfiguration();
+            }
+
+            return isUpdated;
+        }
+
+        private void ReloadConfiguration()
+        {
+            var settings = ReadIniFileSettings(null);
+            ApplyConfigurationSettings(settings);
+        }
+
+        private void ApplyConfigurationSettings((bool autoUpdate, string forcedVersion, bool autoInject) settings)
+        {
+            if (settings.autoInject)
+            {
+                SetupAutoInject(true);
+            }
+            else
+            {
+                if (autoInjectTimer != null)
+                {
+                    autoInjectTimer.Stop();
+                    autoInjectTimer = null;
+                }
+                InjectButton.IsEnabled = true;
+                InjectButton.Opacity = 1;
+                InjectButton.Cursor = Cursors.Arrow;
             }
         }
 
-        private (bool autoUpdate, string forcedVersion, bool autoInject) ReadIniFileSettings()
+        private (bool autoUpdate, string forcedVersion, bool autoInject) ReadIniFileSettings(string? context)
         {
             string iniPath = Path.Combine(BaseDirectory, ConfigName);
             try
@@ -187,12 +221,14 @@ namespace BKC_Injector
                 string forcedVersion = parser.GetValue("BKC Configuration", "ForceVersion")?.Trim() ?? "";
                 bool autoInject = TryGetBoolValue(parser, "BKC Configuration", "AutoInject", false);
 
-                AppendStatus("Configuration file read successfully.");
+                if (!string.IsNullOrEmpty(context))
+                    AppendStatus($"Configuration file was {context} successfully");
+
                 return (autoUpdate, forcedVersion, autoInject);
             }
             catch (Exception ex)
             {
-                AppendStatus($"Failed to read configuration file: {ex.Message}");
+                AppendStatus($"Failed to {context ?? "read"} configuration file: {ex.Message}");
                 return (true, string.Empty, false);
             }
         }
@@ -207,38 +243,31 @@ namespace BKC_Injector
             return defaultValue;
         }
 
-        private async Task EnsureDllIsReady()
+        private async Task EnsureDllIsReady(bool autoUpdate, string forcedVersion)
         {
-            var (autoUpdate, forcedVersion, _) = ReadIniFileSettings();
             string downloadUrl = GetDownloadUrl(forcedVersion);
             string dllPath = Path.Combine(DependenciesDir, DLLName);
 
             bool exists = File.Exists(dllPath);
             if (!exists || (autoUpdate && await IsUpdateNeeded(dllPath, downloadUrl)))
             {
-                if (!exists)
+                DisableUI();
+                try
                 {
-                    AppendStatus($"DLL not found. Initiating download for {Path.GetFileName(downloadUrl)}...");
-                }
-                else if (autoUpdate)
-                {
-                    AppendStatus($"Update available. Initiating update for {Path.GetFileName(downloadUrl)}...");
-                }
-
-                if (await TryDownloadDll(dllPath, downloadUrl))
-                {
-                    if (!exists)
+                    if (await TryDownloadDll(dllPath, downloadUrl))
                     {
-                        AppendStatus("DLL downloaded successfully.");
+                        AppendStatus("DLL downloaded and updated successfully.");
                     }
                     else
                     {
-                        AppendStatus("DLL updated successfully.");
+                        AppendStatus("Failed to download or update the DLL.");
+                        throw new InvalidOperationException("DLL update failed, cannot proceed with auto-inject.");
                     }
                 }
-                else
+                finally
                 {
-                    AppendStatus("Failed to download or update the DLL.");
+                    isUpdateInProgress = false;
+                    EnableUI();
                 }
             }
             else
@@ -350,7 +379,7 @@ namespace BKC_Injector
             }
 
             string dllPath = Path.Combine(DependenciesDir, DLLName);
-            if (!File.Exists(dllPath) || await IsUpdateNeeded(dllPath, DefaultDownloadUrl))
+            if (!File.Exists(dllPath))
             {
                 if (!await TryDownloadDll(dllPath, DefaultDownloadUrl))
                 {
@@ -360,7 +389,6 @@ namespace BKC_Injector
             }
 
             Environment.SetEnvironmentVariable("BKC_PATH", BaseDirectory);
-
             InjectDll(dllPath, targetProcess);
             EnableUI();
         }

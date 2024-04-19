@@ -1,12 +1,13 @@
 ﻿using System.IO;
 using System.Text.RegularExpressions;
-using System.Collections.Generic;
 
 namespace BKC_Injector
 {
     public partial class IniParser
     {
         private readonly Dictionary<string, Dictionary<string, string>> data = [];
+        private static readonly HashSet<string> validSections = ["BKC Configuration"];
+        private static readonly HashSet<string> validKeys = ["AutoUpdate", "ForceVersion", "AutoInject"];
 
         public IniParser(string filePath)
         {
@@ -29,25 +30,33 @@ namespace BKC_Injector
 
                 if (processedLine.StartsWith('[') && processedLine.EndsWith(']'))
                 {
-                    if (!string.IsNullOrEmpty(currentSectionName))
-                        data[currentSectionName] = new Dictionary<string, string>(currentSection);
-
                     currentSectionName = processedLine[1..^1].Trim();
-                    currentSection.Clear();
+                    if (validSections.Contains(currentSectionName))
+                    {
+                        currentSection = [];
+                        data[currentSectionName] = currentSection;
+                    }
+                    else
+                    {
+                        currentSectionName = "";
+                    }
                     continue;
                 }
 
-                var match = PropertyRegex().Match(processedLine);
-                if (match.Success)
+                if (!string.IsNullOrEmpty(currentSectionName))
                 {
-                    string key = match.Groups["key"].Value.Trim();
-                    string value = match.Groups["value"].Value.Trim();
-                    currentSection[key] = value;
+                    var match = PropertyRegex().Match(processedLine);
+                    if (match.Success)
+                    {
+                        string key = match.Groups["key"].Value.Trim();
+                        string value = match.Groups["value"].Value.Trim();
+                        if (validKeys.Contains(key))
+                        {
+                            currentSection[key] = value;
+                        }
+                    }
                 }
             }
-
-            if (!string.IsNullOrEmpty(currentSectionName))
-                data[currentSectionName] = new Dictionary<string, string>(currentSection);
         }
 
         public string? GetValue(string section, string key)
@@ -59,12 +68,15 @@ namespace BKC_Injector
 
         public void SetValue(string section, string key, string value)
         {
-            if (!data.TryGetValue(section, out var sectionData))
+            if (validSections.Contains(section) && validKeys.Contains(key))
             {
-                sectionData = [];
-                data[section] = sectionData;
+                if (!data.TryGetValue(section, out var sectionData))
+                {
+                    sectionData = [];
+                    data[section] = sectionData;
+                }
+                sectionData[key] = value;
             }
-            sectionData[key] = value;
         }
 
         public void SaveSettings(string filePath)

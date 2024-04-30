@@ -1,46 +1,46 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
-  <!-- Basic Project Settings -->
-  <PropertyGroup>
-    <OutputType>WinExe</OutputType>
-    <TargetFramework>net8.0-windows</TargetFramework>
-    <RootNamespace>BKC_Injector</RootNamespace>
-    <Nullable>enable</Nullable>
-    <ImplicitUsings>enable</ImplicitUsings>
-  </PropertyGroup>
+    <!-- Basic Project Settings -->
+    <PropertyGroup>
+        <OutputType>WinExe</OutputType>
+        <TargetFramework>net8.0-windows</TargetFramework>
+        <RootNamespace>BKC_Injector</RootNamespace>
+        <Nullable>enable</Nullable>
+        <ImplicitUsings>enable</ImplicitUsings>
+    </PropertyGroup>
 
-  <!-- WPF and Runtime Settings -->
-  <PropertyGroup>
-    <UseWPF>true</UseWPF>
-    <RuntimeIdentifier>win-x64</RuntimeIdentifier>
-    <Optimize>true</Optimize>
-    <DebugType>none</DebugType>
-  </PropertyGroup>
+    <!-- WPF and Runtime Settings -->
+    <PropertyGroup>
+        <UseWPF>true</UseWPF>
+        <RuntimeIdentifier>win-x64</RuntimeIdentifier>
+        <Optimize>true</Optimize>
+        <DebugType>none</DebugType>
+    </PropertyGroup>
 
-  <!-- Publishing Settings -->
-  <PropertyGroup>
-    <PublishSingleFile>true</PublishSingleFile>
-    <SelfContained>true</SelfContained>
-    <PublishReadyToRun>true</PublishReadyToRun>
-    <IncludeAllContentForSelfExtract>true</IncludeAllContentForSelfExtract>
-    <EnableCompressionInSingleFile>true</EnableCompressionInSingleFile>
-  </PropertyGroup>
+    <!-- Publishing Settings -->
+    <PropertyGroup>
+        <PublishSingleFile>true</PublishSingleFile>
+        <SelfContained>true</SelfContained>
+        <PublishReadyToRun>true</PublishReadyToRun>
+        <IncludeAllContentForSelfExtract>true</IncludeAllContentForSelfExtract>
+        <EnableCompressionInSingleFile>true</EnableCompressionInSingleFile>
+    </PropertyGroup>
 
-  <!-- Application Resources -->
-  <PropertyGroup>
-    <ApplicationIcon>dependencies\favicon.ico</ApplicationIcon>
-    <ApplicationManifest>app.manifest</ApplicationManifest>
-  </PropertyGroup>
+    <!-- Application Resources -->
+    <PropertyGroup>
+        <ApplicationIcon>dependencies\favicon.ico</ApplicationIcon>
+        <ApplicationManifest>app.manifest</ApplicationManifest>
+    </PropertyGroup>
 
-  <!-- Dependencies and Resources -->
-  <ItemGroup>
-    <Resource Include="dependencies\*.*" />
-    <Reference Include="Lunar">
-        <HintPath>dependencies\Lunar.dll</HintPath>
-    </Reference>
-  </ItemGroup>
-  <ItemGroup>
-    <PackageReference Include="MaterialDesignThemes" Version="5.0.1-ci615" />
-  </ItemGroup>
+    <!-- Dependencies and Resources -->
+    <ItemGroup>
+        <Resource Include="dependencies\*.*"/>
+        <Reference Include="Lunar">
+            <HintPath>dependencies\Lunar.dll</HintPath>
+        </Reference>
+    </ItemGroup>
+    <ItemGroup>
+        <PackageReference Include="MaterialDesignThemes" Version="5.0.1-ci615"/>
+    </ItemGroup>
 
 </Project>

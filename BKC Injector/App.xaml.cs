@@ -1,10 +1,7 @@
-﻿using System.Configuration;
-using System.Data;
-using System.Windows;
+﻿using System.Windows;
 
-namespace BKC_Injector
+namespace BKC_Injector;
+
+public partial class App : Application
 {
-    public partial class App : Application
-    {
-    }
 }

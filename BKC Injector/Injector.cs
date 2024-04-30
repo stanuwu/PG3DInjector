@@ -1,23 +1,22 @@
 ﻿using System.Diagnostics;
 using Lunar;
 
-namespace BKC_Injector
-{
-    internal class Injector
-    {
-        public delegate void StatusUpdateHandler(string message);
+namespace BKC_Injector;
 
-        public static void Inject(Process process, string dll, StatusUpdateHandler statusUpdate)
+internal class Injector
+{
+    public delegate void StatusUpdateHandler(string message);
+
+    public static void Inject(Process process, string dll, StatusUpdateHandler statusUpdate)
+    {
+        try
         {
-            try
-            {
-                var mapper = new LibraryMapper(process, dll, MappingFlags.DiscardHeaders);
-                mapper.MapLibrary();
-            }
-            catch (Exception ex)
-            {
-                statusUpdate($"{ex.Message}");
-            }
+            var mapper = new LibraryMapper(process, dll, MappingFlags.DiscardHeaders);
+            mapper.MapLibrary();
+        }
+        catch (Exception ex)
+        {
+            statusUpdate($"{ex.Message}");
         }
     }
 }

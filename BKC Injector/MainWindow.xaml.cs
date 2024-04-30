@@ -359,12 +359,30 @@ namespace BKC_Injector
                 throw;
             }
         }
+        
+        private void CloseButton_Click(object sender, RoutedEventArgs e)
+        {
+            Application.Current.Shutdown();
+        }
+        
+        private void MinimizeButton_Click(object sender, RoutedEventArgs e)
+        {
+            WindowState = WindowState.Minimized;
+        }
 
         private void InjectButton_Click(object sender, RoutedEventArgs e)
         {
             Inject();
         }
 
+        private void Window_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
+        {
+            if (e.ButtonState == MouseButtonState.Pressed)
+            {
+                DragMove();
+            }
+        }
+        
         private async void Inject()
         {
             DisableUI();
@@ -378,6 +396,7 @@ namespace BKC_Injector
                 return;
             }
 
+            
             string dllPath = Path.Combine(DependenciesDir, DLLName);
             if (!File.Exists(dllPath))
             {
@@ -431,4 +450,6 @@ namespace BKC_Injector
         [GeneratedRegex(@"^v\d+\.\d+(-\d+)?$")]
         private static partial Regex VersionRegex();
     }
+    
+    
 }

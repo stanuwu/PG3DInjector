@@ -39,5 +39,8 @@
         <HintPath>dependencies\Lunar.dll</HintPath>
     </Reference>
   </ItemGroup>
+  <ItemGroup>
+    <PackageReference Include="MaterialDesignThemes" Version="5.0.1-ci615" />
+  </ItemGroup>
 
 </Project>

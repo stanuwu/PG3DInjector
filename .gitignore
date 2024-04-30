@@ -3,3 +3,6 @@
 *.user
 /BKC Injector/obj
 /BKC Injector/bin
+/.idea
+/PG3Dinjector/obj
+/PG3Dinjector/bin

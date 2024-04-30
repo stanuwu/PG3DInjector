@@ -39,7 +39,7 @@
                                 </Border>
                             </ControlTemplate>
                         </Button.Template>
-                        X
+                        
                     </Button>
                 </StackPanel>
 
@@ -57,24 +57,42 @@
                      BorderThickness="0" IsReadOnly="True" TextWrapping="Wrap"
                      VerticalScrollBarVisibility="Auto" FontSize="14" FontFamily="Consolas" />
 
-            <Button x:Name="InjectButton" Click="InjectButton_Click" Grid.Row="2" Content="Inject"
-                    HorizontalAlignment="Stretch" VerticalAlignment="Bottom"
-                    Margin="10" Background="#FF0052" Foreground="White" FontSize="16" FontFamily="Consolas"
-                    Padding="5,5" BorderThickness="0">
-                <Button.Style>
-                    <Style TargetType="Button">
-                        <Setter Property="Template">
-                            <Setter.Value>
-                                <ControlTemplate TargetType="Button">
-                                    <Border Background="{TemplateBinding Background}" CornerRadius="8">
-                                        <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" />
-                                    </Border>
-                                </ControlTemplate>
-                            </Setter.Value>
-                        </Setter>
-                    </Style>
-                </Button.Style>
-            </Button>
+            <StackPanel Grid.Row="2" Orientation="Vertical">
+                <Button x:Name="InjectButton" Click="InjectButton_Click" Content="Inject" HorizontalAlignment="Stretch" VerticalAlignment="Bottom"
+                        Margin="10" Background="#FF0052" Foreground="White" FontSize="16" FontFamily="Consolas" Padding="5,5" BorderThickness="0">
+                    <Button.Style>
+                        <Style TargetType="Button">
+                            <Setter Property="Template">
+                                <Setter.Value>
+                                    <ControlTemplate TargetType="Button">
+                                        <Border Background="{TemplateBinding Background}" CornerRadius="8">
+                                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                        </Border>
+                                    </ControlTemplate>
+                                </Setter.Value>
+                            </Setter>
+                        </Style>
+                    </Button.Style>
+                </Button>
+
+                <Button x:Name="ConfigButton" Click="ConfigButton_Click" Content="Open Config"
+                        HorizontalAlignment="Stretch" VerticalAlignment="Bottom" Margin="10" Background="#FF0052" Foreground="White"
+                        FontSize="16" FontFamily="Consolas" Padding="5,5" BorderThickness="0">
+                    <Button.Style>
+                        <Style TargetType="Button">
+                            <Setter Property="Template">
+                                <Setter.Value>
+                                    <ControlTemplate TargetType="Button">
+                                        <Border Background="{TemplateBinding Background}" CornerRadius="8">
+                                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                        </Border>
+                                    </ControlTemplate>
+                                </Setter.Value>
+                            </Setter>
+                        </Style>
+                    </Button.Style>
+                </Button>
+            </StackPanel>
         </Grid>
     </Border>
 </Window>

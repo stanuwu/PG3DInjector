@@ -44,6 +44,12 @@ public partial class MainWindow : Window
         Loaded += async (_, __) => await InitializeApplication();
     }
 
+    private void ConfigButton_Click(object sender, RoutedEventArgs e)
+    {
+        var configWindow = new ConfigWindow(); 
+        configWindow.Show();
+    }
+    
     private static string GetApplicationDirectory()
     {
         return Path.GetDirectoryName(Process.GetCurrentProcess()?.MainModule?.FileName) ??

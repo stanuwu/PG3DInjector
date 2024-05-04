@@ -1,7 +1,8 @@
-.idea
-PG3DInjector.sln.DotSettings.user
-global.json
-PG3DInjector/obj
-PG3DInjector/bin
-PG3DInjector/PG3DInjector.csproj.user
 /.vs
+*/.vs
+*.user
+/BKC Injector/obj
+/BKC Injector/bin
+/.idea
+/PG3Dinjector/obj
+/PG3Dinjector/bin

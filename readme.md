@@ -1,5 +1,5 @@
 ## PG3D Injector
-Injector for [PixelGun3DInternal](https://github.com/stanuwu/PixelGunCheatInternal)
+Injector for [PixelGun3D Unlocker](https://github.com/stanuwu/PG3DUnlocker)
 
 ## Warning!
 - This Program is FREE SOFTWARE.

@@ -3,9 +3,9 @@ using PG3DInjector;
 
 internal class Program
 {
-    private static readonly string Version = "v1.4-3";
-    private static readonly string DLLName = "PixelGunCheat.dll";
-    private static readonly string DownloadUrl = $"https://github.com/stanuwu/PixelGunCheatInternal/releases/latest/download/{DLLName}";
+    private static readonly string Version = "v1.4-4";
+    private static readonly string DLLName = "PG3DUnlock.dll";
+    private static readonly string DownloadUrl = $"https://github.com/stanuwu/PG3DUnlocker/releases/latest/download/{DLLName}";
 
     private static async Task Main(string[] _)
     {

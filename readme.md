@@ -1,3 +1,5 @@
+<!-- GitAds-Verify: WEH1NFTFQMANHVMDQYOHJSPBQZETPSS2 -->
+
 ## PG3D Injector
 Injector for [PixelGun3D Unlocker](https://github.com/stanuwu/PG3DUnlocker)
 

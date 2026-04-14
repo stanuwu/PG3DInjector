@@ -1,5 +1,8 @@
 <!-- GitAds-Verify: WEH1NFTFQMANHVMDQYOHJSPBQZETPSS2 -->
 
+## GitAds Sponsored
+[![Sponsored by GitAds](https://gitads.dev/v1/ad-serve?source=stanuwu/pg3dinjector@github)](https://gitads.dev/v1/ad-track?source=stanuwu/pg3dinjector@github)
+
 ## PG3D Injector
 Injector for [PixelGun3D Unlocker](https://github.com/stanuwu/PG3DUnlocker)
 
